@@ -11,8 +11,10 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
+
   ci:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -52,17 +54,15 @@ jobs:
             python -m pip install --upgrade pip
             pip install -r $model/requirements.txt
 
-            # Pull data from DVC
+            # Pull data from DVC/S3
             if [ -f "$model/data/iris.csv.dvc" ]; then
-              cd $model
-              dvc pull
-              cd ..
+              dvc pull -R $model
             fi
 
             # Train model
             python $model/train.py
 
-            # Verify model exists
+            # Validate model.pkl exists
             if [ ! -f "$model/artifacts/model.pkl" ]; then
               echo "❌ model.pkl missing for $model"
               exit 1

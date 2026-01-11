@@ -1,13 +1,16 @@
 from flask import Flask, request, jsonify
 import joblib
+import os
 from pathlib import Path
 
 app = Flask(__name__)
-MODEL_PATH = Path("artifacts/model.pkl")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = Path(BASE_DIR) / "artifacts" / "model.pkl"
 
-# Load trained model
+# Train model if missing (CI already trains, but useful for local/dev)
 if not MODEL_PATH.exists():
-    raise FileNotFoundError("Model not found in artifacts. Build Docker after training!")
+    import train as _train
+    _train.main()
 
 model = joblib.load(MODEL_PATH)
 

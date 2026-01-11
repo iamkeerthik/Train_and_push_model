@@ -1,25 +1,29 @@
 """
-Training script:
-- pulls data via DVC
+Simple training script:
+- pulls data using DVC
 - trains LogisticRegression
-- saves model to artifacts/model.pkl
+- saves model and metrics
 """
 
 import os
 import joblib
 import json
-import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.datasets import load_iris
+import pandas as pd
+
+# Ensure paths are relative to the script location
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     # Pull training data with DVC
-    if os.path.exists("data/iris.csv.dvc"):
-        os.system("dvc pull data/iris.csv")
+    dvc_csv = os.path.join(BASE_DIR, "data/iris.csv.dvc")
+    if os.path.exists(dvc_csv):
+        os.system(f"cd {BASE_DIR} && dvc pull data/iris.csv")  # fetch from S3
 
-    # Load CSV if exists, else sklearn iris
-    csv_path = "data/iris.csv"
+    # Load dataset (using CSV if exists, otherwise sklearn iris)
+    csv_path = os.path.join(BASE_DIR, "data/iris.csv")
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         X = df.iloc[:, :-1].values
@@ -35,19 +39,20 @@ def main():
     model = LogisticRegression(max_iter=200)
     model.fit(X_train, y_train)
 
-    # Save model inside artifacts folder (inside model1/)
-    os.makedirs("artifacts", exist_ok=True)
-    model_path = os.path.join("artifacts", "model.pkl")
+    # Save model
+    artifacts_dir = os.path.join(BASE_DIR, "artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+    model_path = os.path.join(artifacts_dir, "model.pkl")
     joblib.dump(model, model_path)
 
     # Save metrics
-    acc = model.score(X_test, y_test)
-    metrics = {"accuracy": float(acc)}
-    with open(os.path.join("artifacts", "metrics.json"), "w") as f:
+    metrics_path = os.path.join(artifacts_dir, "metrics.json")
+    metrics = {"accuracy": float(model.score(X_test, y_test))}
+    with open(metrics_path, "w") as f:
         json.dump(metrics, f)
 
     print(f"Saved model to {model_path}")
-    print(f"Test accuracy: {acc:.4f}")
+    print(f"Test accuracy: {metrics['accuracy']:.4f}")
 
 if __name__ == "__main__":
     main()

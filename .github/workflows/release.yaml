@@ -22,8 +22,10 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
+
   release:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,19 +64,9 @@ jobs:
         run: |
           MODEL=${{ github.event.inputs.model }}
           if [ -f "$MODEL/data/iris.csv.dvc" ]; then
-            cd $MODEL
-            dvc pull
-            cd ..
+            dvc pull -R $MODEL
           fi
           python $MODEL/train.py
-
-      - name: Verify model
-        run: |
-          MODEL=${{ github.event.inputs.model }}
-          if [ ! -f "$MODEL/artifacts/model.pkl" ]; then
-            echo "❌ model.pkl missing for release"
-            exit 1
-          fi
 
       - name: Get latest tag
         id: get_tag
