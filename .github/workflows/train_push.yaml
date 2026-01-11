@@ -1,0 +1,65 @@
+name: Dev/Test CI
+
+on:
+  push:
+    branches: [main, develop, feature/**]
+  pull_request:
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: github_action_demo
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  ci:
+    name: CI Train & Dev Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install DVC
+        run: pip install "dvc[s3]"
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Detect model folders
+        id: detect-models
+        run: |
+          MODELS=$(find . -maxdepth 1 -type d ! -name ".git" ! -name ".github" \
+                  -exec test -f "{}/Dockerfile" \; -print | sed 's|^\./||')
+          echo "models=$MODELS" >> $GITHUB_OUTPUT
+
+      - name: Run training and build dev Docker images
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          ECR_URI=${{ steps.login-ecr.outputs.registry }}
+
+          for model in ${{ steps.detect-models.outputs.models }}; do
+            echo "=== Training $model ==="
+            python -m pip install --upgrade pip
+            pip install -r $model/requirements.txt
+
+            # Pull data from DVC/S3
+            if [ -f "$model/data/iris.csv.dvc" ]; then
+              cd $model
+              dvc pull
+              cd ..
+            fi
+
+            python $model/train.py
+
+            # Build Docker image
+            TAG="${model}-dev-${SHORT_SHA}"
+            docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$model
+            docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
+            echo "✅ Pushed dev image: $ECR_URI/${{ env.ECR_REPO }}:$TAG"
+          done

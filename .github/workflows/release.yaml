@@ -1,0 +1,116 @@
+name: Release – Train & Push
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model folder name (e.g., model1)"
+        required: true
+      bump_type:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: github_action_demo
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install DVC
+        run: pip install "dvc[s3]"
+
+      - name: Validate model folder
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          if [ ! -d "$MODEL" ]; then
+            echo "❌ Model folder $MODEL not found"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          python -m pip install --upgrade pip
+          pip install -r $MODEL/requirements.txt
+
+      - name: Pull data and run training
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          if [ -f "$MODEL/data/iris.csv.dvc" ]; then
+            cd $MODEL
+            dvc pull
+            cd ..
+          fi
+          python $MODEL/train.py
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          latest=$(git tag --list "${MODEL}-v*" | sort -V | tail -n1)
+          latest=${latest:-"${MODEL}-v0.0.0"}
+          echo "tag=$latest" >> $GITHUB_OUTPUT
+
+      - name: Calculate next version
+        id: bump
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          old=${{ steps.get_tag.outputs.tag }}
+          ver=${old#${MODEL}-v}
+          IFS='.' read -r major minor patch <<< "$ver"
+          case "${{ github.event.inputs.bump_type }}" in
+            major) major=$((major+1)); minor=0; patch=0 ;;
+            minor) minor=$((minor+1)); patch=0 ;;
+            patch) patch=$((patch+1)) ;;
+          esac
+          new_tag="${MODEL}-v$major.$minor.$patch"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Create Git tag
+        run: |
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push Docker
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          TAG=${{ steps.bump.outputs.new_tag }}
+          ECR_URI=${{ steps.login-ecr.outputs.registry }}
+          docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$MODEL
+          docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          name: "Release ${{ steps.bump.outputs.new_tag }}"
+          body: |
+            Model: **${{ github.event.inputs.model }}**
+            Version: **${{ steps.bump.outputs.new_tag }}**
+            Docker Image: `${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.bump.outputs.new_tag }}`
