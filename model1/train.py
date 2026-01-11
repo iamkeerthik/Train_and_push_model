@@ -6,20 +6,28 @@ Simple training script:
 """
 
 import os
-from sklearn.datasets import load_iris
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
 import joblib
 import json
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import load_iris
+import pandas as pd
 
 def main():
     # Pull training data with DVC
     if os.path.exists("data/iris.csv.dvc"):
         os.system("dvc pull data/iris.csv")  # fetches from S3
 
-    # Load dataset (for demo, using sklearn iris)
-    iris = load_iris()
-    X, y = iris.data, iris.target
+    # Load dataset (using CSV if exists, otherwise sklearn iris)
+    csv_path = "data/iris.csv"
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        X = df.iloc[:, :-1].values
+        y = df.iloc[:, -1].values
+    else:
+        iris = load_iris()
+        X, y = iris.data, iris.target
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )

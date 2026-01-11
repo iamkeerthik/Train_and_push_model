@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # needed for git tags
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -46,7 +46,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-
       - name: Validate model folder
         run: |
           MODEL=${{ github.event.inputs.model }}
@@ -61,14 +60,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r $MODEL/requirements.txt
 
-      - name: Pull data and run training
+      - name: Pull DVC data & train model
         run: |
           MODEL=${{ github.event.inputs.model }}
           if [ -f "$MODEL/data/iris.csv.dvc" ]; then
             cd $MODEL
+            echo "Pulling data from DVC..."
             dvc pull
             cd ..
           fi
+          echo "Training model..."
           python $MODEL/train.py
 
       - name: Get latest tag
@@ -105,13 +106,14 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & Push Docker
+      - name: Build & Push Docker image
         run: |
           MODEL=${{ github.event.inputs.model }}
           TAG=${{ steps.bump.outputs.new_tag }}
           ECR_URI=${{ steps.login-ecr.outputs.registry }}
           docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$MODEL
           docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
+          echo "✅ Pushed release image: $ECR_URI/${{ env.ECR_REPO }}:$TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

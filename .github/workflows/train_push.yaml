@@ -62,6 +62,7 @@ jobs:
               cd ..
             fi
 
+            # Train model
             python $model/train.py
 
             # Build Docker image

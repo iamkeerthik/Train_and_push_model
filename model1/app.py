@@ -3,13 +3,11 @@ import joblib
 from pathlib import Path
 
 app = Flask(__name__)
-MODEL_PATH = Path("artifacts/model.pkl")
 
-# If model does not exist, train it
-if not MODEL_PATH.exists():
-    import train as _train
-    _train.main()
+BASE_DIR = Path(__file__).parent
+MODEL_PATH = BASE_DIR / "artifacts/model.pkl"
 
+# Load trained model (already baked into Docker image)
 model = joblib.load(MODEL_PATH)
 
 @app.route("/health", methods=["GET"])
