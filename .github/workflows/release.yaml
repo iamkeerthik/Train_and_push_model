@@ -22,14 +22,12 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-
   release:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # needed for git tags
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -60,17 +58,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r $MODEL/requirements.txt
 
-      - name: Pull DVC data & train model
+      - name: Pull data and run training
         run: |
           MODEL=${{ github.event.inputs.model }}
           if [ -f "$MODEL/data/iris.csv.dvc" ]; then
             cd $MODEL
-            echo "Pulling data from DVC..."
             dvc pull
             cd ..
           fi
-          echo "Training model..."
           python $MODEL/train.py
+
+      - name: Verify model
+        run: |
+          MODEL=${{ github.event.inputs.model }}
+          if [ ! -f "$MODEL/artifacts/model.pkl" ]; then
+            echo "❌ model.pkl missing for release"
+            exit 1
+          fi
 
       - name: Get latest tag
         id: get_tag
@@ -106,14 +110,13 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & Push Docker image
+      - name: Build & Push Docker
         run: |
           MODEL=${{ github.event.inputs.model }}
           TAG=${{ steps.bump.outputs.new_tag }}
           ECR_URI=${{ steps.login-ecr.outputs.registry }}
           docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$MODEL
           docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
-          echo "✅ Pushed release image: $ECR_URI/${{ env.ECR_REPO }}:$TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

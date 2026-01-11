@@ -1,24 +1,24 @@
 """
-Simple training script:
-- pulls data using DVC
+Training script:
+- pulls data via DVC
 - trains LogisticRegression
-- saves model and metrics
+- saves model to artifacts/model.pkl
 """
 
 import os
 import joblib
 import json
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.datasets import load_iris
-import pandas as pd
 
 def main():
     # Pull training data with DVC
     if os.path.exists("data/iris.csv.dvc"):
-        os.system("dvc pull data/iris.csv")  # fetches from S3
+        os.system("dvc pull data/iris.csv")
 
-    # Load dataset (using CSV if exists, otherwise sklearn iris)
+    # Load CSV if exists, else sklearn iris
     csv_path = "data/iris.csv"
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
@@ -35,7 +35,7 @@ def main():
     model = LogisticRegression(max_iter=200)
     model.fit(X_train, y_train)
 
-    # Save model
+    # Save model inside artifacts folder (inside model1/)
     os.makedirs("artifacts", exist_ok=True)
     model_path = os.path.join("artifacts", "model.pkl")
     joblib.dump(model, model_path)
