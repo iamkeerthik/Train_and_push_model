@@ -17,7 +17,7 @@ This repository contains an automated end-to-end MLOps pipeline for training **M
     ├── artifacts/             # Local storage for trained models/pickles
     ├── data/
     │   ├── .gitignore         # Prevents raw data from being committed to Git
-    │   ├── iris.csv           # Raw data file (tracked by DVC)
+    │   ├── iris.csv           # Raw data file (tracked by DVC) (.gitignored while pushing to github)
     │   └── iris.csv.dvc       # DVC metadata for the dataset
     ├── requirements.txt       # Python dependencies
     └── train.py               # Model training script
