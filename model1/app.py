@@ -3,17 +3,18 @@ import joblib
 from pathlib import Path
 
 app = Flask(__name__)
-
 MODEL_PATH = Path("artifacts/model.pkl")
 LE_PATH = Path("artifacts/label_encoder.pkl")
 
-# Load artifacts
-if not MODEL_PATH.exists() or not LE_PATH.exists():
+# Train if missing
+if not MODEL_PATH.exists():
     import train as _train
     _train.main()
 
 model = joblib.load(MODEL_PATH)
-label_encoder = joblib.load(LE_PATH)
+
+# Load label encoder if exists (for string labels)
+le = joblib.load(LE_PATH) if LE_PATH.exists() else None
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -26,9 +27,12 @@ def predict():
         return jsonify({"error": "send JSON with key 'features'"}), 400
     try:
         features = data["features"]
-        pred_int = model.predict([features])[0]
-        pred_label = label_encoder.inverse_transform([pred_int])[0]
-        return jsonify({"prediction": pred_label})
+        pred = model.predict([features])
+        # Convert back to string label if encoder exists
+        if le is not None:
+            pred_label = le.inverse_transform(pred)
+            return jsonify({"prediction": str(pred_label[0])})
+        return jsonify({"prediction": int(pred[0])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
