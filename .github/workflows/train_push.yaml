@@ -11,8 +11,8 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
-
   ci:
+    name: CI Train & Dev Docker
     runs-on: ubuntu-latest
 
     steps:
@@ -51,24 +51,30 @@ jobs:
 
           for model in ${{ steps.detect-models.outputs.models }}; do
             echo "=== Training $model ==="
+
+            # Install model-specific requirements
             python -m pip install --upgrade pip
             pip install -r $model/requirements.txt
 
             # Pull data from DVC/S3
             if [ -f "$model/data/iris.csv.dvc" ]; then
-              dvc pull -R $model
+              pushd $model
+              dvc pull
+              popd
             fi
 
-            # Train model
-            python $model/train.py
+            # Run training inside the model folder
+            pushd $model
+            python train.py
 
-            # Validate model.pkl exists
-            if [ ! -f "$model/artifacts/model.pkl" ]; then
+            # Ensure artifact exists
+            if [ ! -f artifacts/model.pkl ]; then
               echo "❌ model.pkl missing for $model"
               exit 1
             fi
+            popd
 
-            # Build Docker image
+            # Build and push Docker image
             TAG="${model}-dev-${SHORT_SHA}"
             docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$model
             docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
