@@ -3,7 +3,9 @@ name: Dev/Test CI
 on:
   push:
     branches: [main, develop, feature/**]
-  pull_request:
+    paths-ignore:
+      - ".github/**"
+      - "**/*.md"
 
 env:
   AWS_REGION: ap-south-1

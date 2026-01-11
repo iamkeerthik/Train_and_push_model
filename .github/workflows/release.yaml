@@ -18,11 +18,10 @@ permissions:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPO: github_action_demo
+  ECR_REPO: app
   PYTHON_VERSION: "3.11"
 
 jobs:
-
   release:
     runs-on: ubuntu-latest
 
@@ -53,20 +52,37 @@ jobs:
             echo "❌ Model folder $MODEL not found"
             exit 1
           fi
+          if [ ! -f "$MODEL/Dockerfile" ]; then
+            echo "❌ Dockerfile missing in $MODEL"
+            exit 1
+          fi
 
-      - name: Install dependencies
+      - name: Install model dependencies
         run: |
           MODEL=${{ github.event.inputs.model }}
           python -m pip install --upgrade pip
           pip install -r $MODEL/requirements.txt
 
-      - name: Pull data and run training
+      - name: Pull data & train model
         run: |
           MODEL=${{ github.event.inputs.model }}
+
+          # Pull DVC data
           if [ -f "$MODEL/data/iris.csv.dvc" ]; then
-            dvc pull -R $MODEL
+            pushd $MODEL
+            dvc pull
+            popd
           fi
-          python $MODEL/train.py
+
+          # Train model
+          pushd $MODEL
+          python train.py
+
+          if [ ! -f artifacts/model.pkl ]; then
+            echo "❌ model.pkl missing after training"
+            exit 1
+          fi
+          popd
 
       - name: Get latest tag
         id: get_tag
@@ -83,11 +99,13 @@ jobs:
           old=${{ steps.get_tag.outputs.tag }}
           ver=${old#${MODEL}-v}
           IFS='.' read -r major minor patch <<< "$ver"
+
           case "${{ github.event.inputs.bump_type }}" in
             major) major=$((major+1)); minor=0; patch=0 ;;
             minor) minor=$((minor+1)); patch=0 ;;
             patch) patch=$((patch+1)) ;;
           esac
+
           new_tag="${MODEL}-v$major.$minor.$patch"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
@@ -102,11 +120,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & Push Docker
+      - name: Build & Push Docker image
         run: |
           MODEL=${{ github.event.inputs.model }}
           TAG=${{ steps.bump.outputs.new_tag }}
           ECR_URI=${{ steps.login-ecr.outputs.registry }}
+
           docker build -t $ECR_URI/${{ env.ECR_REPO }}:$TAG ./$MODEL
           docker push $ECR_URI/${{ env.ECR_REPO }}:$TAG
 
@@ -118,4 +137,5 @@ jobs:
           body: |
             Model: **${{ github.event.inputs.model }}**
             Version: **${{ steps.bump.outputs.new_tag }}**
-            Docker Image: `${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.bump.outputs.new_tag }}`
+            Docker Image:
+            `${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.bump.outputs.new_tag }}`
