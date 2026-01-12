@@ -1,0 +1,63 @@
+name: Train and Upload Model - kserve
+on:
+  workflow_dispatch:
+    inputs:
+      model-folder:
+        description: "Select model folder to train and push"
+        required: true
+        default: "intent-classifier"
+
+env:
+  AWS_REGION: ap-south-1
+  S3_BUCKET: your-mlops-bucket  # Change this to your bucket
+
+jobs:
+  train-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------- CHECKOUT ----------
+      - uses: actions/checkout@v4
+
+      # ---------- SETUP PYTHON ----------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.10
+
+      # ---------- INSTALL DEPENDENCIES ----------
+      - name: Install requirements
+        run: |
+          pip install -r requirements.txt
+          pip install dvc[s3] scikit-learn pandas joblib
+
+      # ---------- CONFIGURE AWS ----------
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ---------- PULL DATA VIA DVC ----------
+      - name: Pull dataset
+        run: |
+          MODEL_FOLDER="${{ github.event.inputs.model-folder }}"
+          echo "Pulling data for model: $MODEL_FOLDER"
+          cd $MODEL_FOLDER
+          dvc pull
+          cd -
+
+      # ---------- TRAIN MODEL ----------
+      - name: Train model
+        run: |
+          MODEL_FOLDER="${{ github.event.inputs.model-folder }}"
+          echo "Training model in folder: $MODEL_FOLDER"
+          python $MODEL_FOLDER/train.py
+
+      # ---------- UPLOAD ARTIFACTS TO S3 ----------
+      - name: Upload model to S3
+        run: |
+          MODEL_FOLDER="${{ github.event.inputs.model-folder }}"
+          echo "Uploading artifacts for $MODEL_FOLDER to S3 bucket $S3_BUCKET"
+          aws s3 cp $MODEL_FOLDER/model/artifacts/intent_model.pkl s3://$S3_BUCKET/$MODEL_FOLDER/intent_model.pkl
+          aws s3 cp $MODEL_FOLDER/model/artifacts/label_encoder.pkl s3://$S3_BUCKET/$MODEL_FOLDER/label_encoder.pkl
+          aws s3 cp $MODEL_FOLDER/model/artifacts/metrics.json s3://$S3_BUCKET/$MODEL_FOLDER/metrics.json
