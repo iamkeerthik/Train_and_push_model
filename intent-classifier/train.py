@@ -6,6 +6,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import CountVectorizer
 
 def main():
     # Pull dataset from DVC
@@ -21,21 +22,22 @@ def main():
     le = LabelEncoder()
     y = le.fit_transform(y_raw)
 
-    # Save label encoder for inference
-    os.makedirs("model/artifacts", exist_ok=True)
-    joblib.dump(le, "model/artifacts/label_encoder.pkl")
-
-    # Train pipeline
+    # Train pipeline and bundle label encoder inside
     pipeline = Pipeline([
         ("vect", CountVectorizer()),
-        ("clf", MultinomialNB())
+        ("clf", MultinomialNB()),
+        ("label_encoder", le)  # We include encoder as an attribute
     ])
     pipeline.fit(X, y)
 
-    # Save trained model
-    joblib.dump(pipeline, "model/artifacts/intent_model.pkl")
+    # Save trained pipeline (model + encoder together)
+    os.makedirs("model/artifacts", exist_ok=True)
+    joblib.dump({
+        "model_pipeline": pipeline,
+        "label_encoder": le
+    }, "model/artifacts/intent_model.pkl")
 
-    # Save metrics (accuracy on same data as quick check)
+    # Quick accuracy check
     acc = pipeline.score(X, y)
     with open("model/artifacts/metrics.json", "w") as f:
         json.dump({"accuracy": float(acc)}, f)
